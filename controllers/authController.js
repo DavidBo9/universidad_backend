@@ -32,41 +32,40 @@ const login = async (req, res) => {
     console.log('Usuario encontrado:', username);
     
     // Verificar la contraseña con bcrypt directamente
-    let isValidPassword = false;
+// Verificar la contraseña con bcrypt directamente desde Node.js
+let isValidPassword = false;
+
+try {
+  if (user.password_hash) {
+    isValidPassword = await bcrypt.compare(password, user.password_hash);
+    console.log('Verificación bcrypt:', isValidPassword);
+  }
+} catch (error) {
+  console.error('Error verificando con bcrypt:', error);
+}
+
+// Solo usar contraseñas hardcodeadas en desarrollo y si la verificación bcrypt falló
+if (!isValidPassword && process.env.NODE_ENV === 'development') {
+  const passwordsMap = {
+    'admin': 'admin123',
+    'jperez': 'profesor123',
+    'mgonzalez': 'estudiante123',
+    'arodriguez': 'secretaria123'
+  };
+  
+  if (passwordsMap[username] === password) {
+    console.log('Verificación con contraseña hardcodeada exitosa');
+    isValidPassword = true;
     
-    // Primero intenta verificar con bcrypt
-    try {
-      if (user.password_hash && user.password_hash.startsWith('$2')) {
-        isValidPassword = await bcrypt.compare(password, user.password_hash);
-        console.log('Verificación bcrypt:', isValidPassword);
-      }
-    } catch (error) {
-      console.error('Error verificando con bcrypt:', error);
-    }
-    
-    // Si falla, verifica si es la contraseña hardcodeada (solo para desarrollo)
-    if (!isValidPassword) {
-      // Verificación temporal solo para desarrollo
-      const passwordsMap = {
-        'admin': 'admin123',
-        'jperez': 'profesor123',
-        'mgonzalez': 'estudiante123',
-        'arodriguez': 'secretaria123'
-      };
-      
-      if (passwordsMap[username] === password) {
-        console.log('Verificación con contraseña hardcodeada exitosa');
-        isValidPassword = true;
-        
-        // Opcionalmente, actualiza el hash para futuras verificaciones
-        const newHash = await bcrypt.hash(password, 10);
-        await pgPool.query(
-          'UPDATE usuarios SET password_hash = $1 WHERE nombre_usuario = $2',
-          [newHash, username]
-        );
-        console.log('Hash actualizado para usuario:', username);
-      }
-    }
+    // Actualizar el hash para futuras verificaciones
+    const newHash = await bcrypt.hash(password, 10);
+    await pgPool.query(
+      'UPDATE usuarios SET password_hash = $1 WHERE nombre_usuario = $2',
+      [newHash, username]
+    );
+  }
+}
+
     
     if (!isValidPassword) {
       return res.status(401).json({ message: 'Credenciales inválidas' });
