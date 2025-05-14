@@ -34,50 +34,89 @@ router.get('/', authenticateToken, async (req, res) => {
 });
 
 // Crear un nuevo documento
+// En documentoRoutes.js - Ruta POST
 router.post('/', authenticateToken, async (req, res) => {
-  try {
-    const { titulo, tipo, contenido, relacionado_con, etiquetas } = req.body;
-    const { pgPool } = require('../config/db');
-    const db = getDb();
-    
-    // Validar datos requeridos
-    if (!titulo || !tipo || !contenido) {
-      return res.status(400).json({ message: 'Título, tipo y contenido son requeridos' });
+    try {
+      const { titulo, tipo, contenido, relacionado_con, etiquetas } = req.body;
+      const db = getDb();
+      
+      // Validar datos requeridos
+      if (!titulo || !tipo || !contenido) {
+        return res.status(400).json({ message: 'Título, tipo y contenido son requeridos' });
+      }
+      
+      // Verificar si el tipo está en la lista permitida
+      const tiposPermitidos = ['tesis', 'investigacion', 'proyecto', 'examen', 'tarea'];
+      const tipoValidado = tiposPermitidos.includes(tipo) ? tipo : 'tarea'; // Valor por defecto si no está en la lista
+      
+      // Verificar si relacionado_con.tipo está en la lista permitida
+      let relacionadoConValidado = null;
+      if (relacionado_con && relacionado_con.tipo && relacionado_con.id) {
+        const tiposRelacionPermitidos = ['curso', 'estudiante', 'profesor', 'materia'];
+        if (tiposRelacionPermitidos.includes(relacionado_con.tipo)) {
+          relacionadoConValidado = {
+            tipo: relacionado_con.tipo,
+            id: parseInt(relacionado_con.id, 10) // Asegurar que es un entero
+          };
+        }
+      }
+      
+      // Convertir contenido a objeto si es string
+      let contenidoObj;
+      try {
+        contenidoObj = typeof contenido === 'string' 
+          ? { texto: contenido } // Convertir string a objeto
+          : contenido;  // Ya es un objeto
+      } catch (error) {
+        contenidoObj = { texto: contenido.toString() };
+      }
+      
+      // Convertir autor_id a entero
+      const autorId = parseInt(req.user.id, 10);
+      
+      // Crear un documento que cumpla con el esquema
+      const documentoCompleto = {
+        titulo,
+        tipo: tipoValidado,
+        autor_id: autorId,
+        contenido: contenidoObj,
+        relacionado_con: relacionadoConValidado,
+        etiquetas: etiquetas || [],
+        fecha_creacion: new Date(),
+        fecha_modificacion: new Date()
+      };
+      
+      console.log('Intentando insertar documento:', JSON.stringify(documentoCompleto, null, 2));
+      
+      // Insertar en MongoDB
+      const result = await db.collection('documentos_academicos').insertOne(documentoCompleto);
+      
+      // Registrar en PostgreSQL si es necesario
+      try {
+        const { pgPool } = require('../config/db');
+        await pgPool.query(
+          'INSERT INTO documentos_mongo (tipo_documento, mongodb_id, entidad_relacionada, id_entidad) ' +
+          'VALUES ($1, $2, $3, $4)',
+          [
+            tipoValidado, 
+            result.insertedId.toString(),
+            relacionadoConValidado ? relacionadoConValidado.tipo : null,
+            relacionadoConValidado ? relacionadoConValidado.id : null
+          ]
+        );
+      } catch (pgError) {
+        console.error('Error en PostgreSQL, pero documento guardado en MongoDB:', pgError);
+      }
+      
+      res.status(201).json({ 
+        message: 'Documento creado correctamente',
+        documento_id: result.insertedId
+      });
+    } catch (error) {
+      console.error('Error creando documento:', error);
+      res.status(500).json({ message: 'Error en el servidor' });
     }
-    
-    // Crear documento en MongoDB
-    const result = await db.collection('documentos_academicos').insertOne({
-      titulo,
-      tipo,
-      autor_id: req.user.id,
-      relacionado_con,
-      contenido,
-      etiquetas: etiquetas || [],
-      fecha_creacion: new Date(),
-      fecha_modificacion: new Date()
-    });
-    
-    // Registrar en PostgreSQL la referencia a MongoDB
-    await pgPool.query(
-      'INSERT INTO documentos_mongo (tipo_documento, mongodb_id, entidad_relacionada, id_entidad) ' +
-      'VALUES ($1, $2, $3, $4)',
-      [
-        tipo, 
-        result.insertedId.toString(),
-        relacionado_con ? relacionado_con.tipo : null,
-        relacionado_con ? relacionado_con.id : null
-      ]
-    );
-    
-    res.status(201).json({ 
-      message: 'Documento creado correctamente',
-      documento_id: result.insertedId
-    });
-  } catch (error) {
-    console.error('Error creando documento:', error);
-    res.status(500).json({ message: 'Error en el servidor' });
-  }
-});
+  });
 
 // Obtener un documento específico
 router.get('/:id', authenticateToken, async (req, res) => {
