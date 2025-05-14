@@ -1,18 +1,19 @@
 // middleware/cors.js
 module.exports = (req, res, next) => {
-    // Permitir cualquier origen en desarrollo
-    res.header('Access-Control-Allow-Origin', '*');
+    // Allow specific origin
+    res.header('Access-Control-Allow-Origin', 'http://localhost:3000');
     
-    // Métodos HTTP permitidos
+    // Methods HTTP allowed
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     
-    // Cabeceras permitidas
+    // Headers allowed
     res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
     
-    // Importante para el preflight
-    res.header('Access-Control-Max-Age', '86400'); // 24 horas
+    // Important for preflight
+    res.header('Access-Control-Max-Age', '86400'); // 24 hours
+    res.header('Access-Control-Allow-Credentials', 'true');
     
-    // Responder a las solicitudes OPTIONS inmediatamente
+    // Respond to OPTIONS requests immediately
     if (req.method === 'OPTIONS') {
       return res.status(200).end();
     }
