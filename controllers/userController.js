@@ -21,42 +21,47 @@ const getUsers = async (req, res) => {
 };
 
 // Crear usuario
+// En userController.js o donde crees usuarios
 const createUser = async (req, res) => {
+  const client = await pgPool.connect();
+  
   try {
-    const { nombre, apellido, email, nombre_usuario, password, rol_id } = req.body;
+    await client.query('BEGIN');
     
-    // Validar datos requeridos
-    if (!nombre || !apellido || !email || !nombre_usuario || !password || !rol_id) {
-      return res.status(400).json({ message: 'Todos los campos son requeridos' });
-    }
-    
-    // Verificar si el usuario ya existe
-    const userExists = await pgPool.query(
-      'SELECT * FROM usuarios WHERE nombre_usuario = $1 OR email = $2',
-      [nombre_usuario, email]
-    );
-    
-    if (userExists.rows.length > 0) {
-      return res.status(400).json({ message: 'El usuario o email ya está registrado' });
-    }
-    
-    // Hashear contraseña
-    const hashedPassword = await bcrypt.hash(password, 10);
-    
-    // Insertar usuario
-    const result = await pgPool.query(
+    // 1. Crear el usuario
+    const userResult = await client.query(
       'INSERT INTO usuarios (nombre, apellido, email, nombre_usuario, password_hash, rol_id, activo) ' +
       'VALUES ($1, $2, $3, $4, $5, $6, TRUE) RETURNING usuario_id',
-      [nombre, apellido, email, nombre_usuario, hashedPassword, rol_id]
+      [req.body.nombre, req.body.apellido, req.body.email, req.body.nombre_usuario, 
+       await bcrypt.hash(req.body.password, 10), req.body.rol_id]
     );
     
-    res.status(201).json({ 
+    const usuarioId = userResult.rows[0].usuario_id;
+    
+    // 2. Si es estudiante, crear registro en tabla estudiantes
+    if (req.body.rol_id === 3) {
+      // Generar una matrícula única si no se proporciona
+      const matricula = req.body.matricula || `EST${new Date().getFullYear()}${String(usuarioId).padStart(3, '0')}`;
+      
+      await client.query(
+        'INSERT INTO estudiantes (usuario_id, matricula, fecha_ingreso, carrera, semestre) ' +
+        'VALUES ($1, $2, $3, $4, $5)',
+        [usuarioId, matricula, new Date(), req.body.carrera || 'Ingeniería Informática', req.body.semestre || 1]
+      );
+    }
+    
+    await client.query('COMMIT');
+    
+    res.status(201).json({
       message: 'Usuario creado correctamente',
-      usuario_id: result.rows[0].usuario_id
+      usuario_id: usuarioId
     });
   } catch (error) {
-    console.error('Error creando usuario:', error);
+    await client.query('ROLLBACK');
+    console.error('Error:', error);
     res.status(500).json({ message: 'Error en el servidor' });
+  } finally {
+    client.release();
   }
 };
 

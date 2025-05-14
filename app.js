@@ -10,6 +10,7 @@ const userRoutes = require('./routes/userRoutes');
 const cursoRoutes = require('./routes/cursoRoutes');
 const documentoRoutes = require('./routes/documentoRoutes');
 const inscripcionRoutes = require('./routes/inscripcionRoutes');
+const studentRoutes = require('./routes/studentRoutes');
 
 // Initialize Express
 const app = express();
@@ -34,6 +35,7 @@ app.get('/test', (req, res) => {
 
 
 app.use(morgan('combined'));
+
 
 // Configure rate limiting
 const limiter = rateLimit({
@@ -60,6 +62,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/cursos', cursoRoutes);
 app.use('/api/documentos', documentoRoutes);
 app.use('/api/inscripciones', inscripcionRoutes);
+app.use('/api/students', studentRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
